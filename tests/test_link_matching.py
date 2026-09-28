@@ -1,12 +1,13 @@
 """Which links get accepted is the core routing rule of the bot: a false negative
-means a valid Shorts/TikTok link silently gets ignored, and a false positive means
-we try to feed yt-dlp a URL it can't handle. These tests pin that behavior without
-touching the network.
+means a valid Shorts/TikTok/Reels link silently gets ignored, and a false positive
+means we try to feed yt-dlp a URL it can't handle. These tests pin that behavior
+without touching the network.
 """
 
 import asyncio
 
 from shorty_bot.downloader import DownloaderRegistry
+from shorty_bot.downloader.instagram import InstagramDownloader
 from shorty_bot.downloader.tiktok import TikTokDownloader
 from shorty_bot.downloader.yt import YouTubeDownloader
 
@@ -19,6 +20,10 @@ def _make_yt() -> YouTubeDownloader:
 
 def _make_tiktok() -> TikTokDownloader:
     return TikTokDownloader(max_bytes=MAX_BYTES, semaphore=asyncio.Semaphore(1))
+
+
+def _make_instagram() -> InstagramDownloader:
+    return InstagramDownloader(max_bytes=MAX_BYTES, semaphore=asyncio.Semaphore(1))
 
 
 class TestYouTubeMatch:
@@ -75,6 +80,47 @@ class TestTikTokMatch:
         assert _make_tiktok().match(url) is None
 
 
+class TestInstagramMatch:
+    def test_accepts_reel_with_scheme(self) -> None:
+        url = "https://www.instagram.com/reel/C8abc_123-X/"
+        assert _make_instagram().match(url) is not None
+
+    def test_accepts_reels_plural(self) -> None:
+        url = "https://www.instagram.com/reels/C8abc_123-X/"
+        assert _make_instagram().match(url) is not None
+
+    def test_accepts_reel_with_username_path(self) -> None:
+        url = "instagram.com/someuser/reel/C8abc_123-X/"
+        assert _make_instagram().match(url) is not None
+
+    def test_accepts_share_link(self) -> None:
+        url = "https://www.instagram.com/share/reel/BAabc123/"
+        assert _make_instagram().match(url) is not None
+
+    def test_accepts_with_query_string(self) -> None:
+        url = "https://www.instagram.com/reel/C8abc_123-X/?igsh=MWx0b2x2"
+        assert _make_instagram().match(url) == url
+
+    def test_accepts_reel_without_scheme(self) -> None:
+        assert _make_instagram().match("instagram.com/reel/C8abc_123-X/") is not None
+
+    def test_accepts_link_embedded_in_text(self) -> None:
+        url = "https://www.instagram.com/reel/C8abc_123-X/"
+        found = _make_instagram().match(f"check this out {url} nice right?")
+        assert found == url
+
+    def test_rejects_post_url(self) -> None:
+        assert _make_instagram().match("https://www.instagram.com/p/C8abc123/") is None
+
+    def test_rejects_profile_url(self) -> None:
+        assert _make_instagram().match("https://www.instagram.com/someuser/") is None
+
+    def test_rejects_lookalike_domain(self) -> None:
+        insta = _make_instagram()
+        assert insta.match("https://fakeinstagram.com/reel/abc/") is None
+        assert insta.match("https://instagram.com.evil.com/reel/abc/") is None
+
+
 class TestDownloaderRegistryFind:
     def _registry(self) -> DownloaderRegistry:
         return DownloaderRegistry.default(max_bytes=MAX_BYTES, max_concurrent=2)
@@ -92,6 +138,12 @@ class TestDownloaderRegistryFind:
         assert found is not None
         downloader, _ = found
         assert isinstance(downloader, TikTokDownloader)
+
+    def test_routes_instagram_to_instagram_downloader(self) -> None:
+        found = self._registry().find("https://www.instagram.com/reel/C8abc_123-X/")
+        assert found is not None
+        downloader, _ = found
+        assert isinstance(downloader, InstagramDownloader)
 
     def test_returns_none_for_unrelated_text(self) -> None:
         assert self._registry().find("just a regular message with no links") is None

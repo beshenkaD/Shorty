@@ -1,4 +1,5 @@
 from shorty_bot.downloader.base import BaseDownloader, DownloaderHandle
+from shorty_bot.downloader.instagram import InstagramDownloader
 from shorty_bot.downloader.models import (
     DownloadCancelledError,
     DownloaderError,
@@ -22,6 +23,7 @@ __all__ = [
     "DownloadProgress",
     "DownloadResult",
     "FileTooLargeError",
+    "InstagramDownloader",
     "MediaKind",
     "TikTokDownloader",
     "YouTubeDownloader",

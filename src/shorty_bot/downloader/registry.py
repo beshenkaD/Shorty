@@ -2,6 +2,7 @@ import asyncio
 from dataclasses import dataclass
 
 from shorty_bot.downloader.base import BaseDownloader
+from shorty_bot.downloader.instagram import InstagramDownloader
 from shorty_bot.downloader.tiktok import TikTokDownloader
 from shorty_bot.downloader.yt import YouTubeDownloader
 
@@ -25,5 +26,6 @@ class DownloaderRegistry:
             downloaders=(
                 YouTubeDownloader(max_bytes=max_bytes, semaphore=semaphore),
                 TikTokDownloader(max_bytes=max_bytes, semaphore=semaphore),
+                InstagramDownloader(max_bytes=max_bytes, semaphore=semaphore),
             )
         )
