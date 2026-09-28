@@ -21,20 +21,49 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev --no-editable
 
 
-FROM python:3.12-slim-bookworm
+# yt-dlp only uses ffmpeg to remux/merge with stream copy, so build a static ffmpeg with
+# every container, parser and bitstream filter but no codecs or external libraries.
+# Debian's ffmpeg package drags in hundreds of MB of codec and GPU libraries instead.
+FROM debian:bookworm-slim AS ffmpeg
 
-# Keep uv from trying to manage its own Python; use the interpreter baked into this image.
-ENV UV_PYTHON_DOWNLOADS=0 \
-    PATH="/app/.venv/bin:$PATH"
+ARG FFMPEG_VERSION=7.1.1
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg \
+    && apt-get install -y --no-install-recommends build-essential ca-certificates curl xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
-RUN groupadd --system app && useradd --system --create-home --gid app app
+WORKDIR /src
+RUN curl -fsSL "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz" \
+    | tar -xJ --strip-components=1
+
+# Decoders are only for probing: MPEG-TS (HLS) streams don't store sample rate/dimensions
+# in the container, so remuxing them to mp4 fails without them.
+RUN ./configure \
+        --prefix=/opt/ffmpeg \
+        --enable-static --disable-shared --extra-ldflags=-static \
+        --disable-autodetect --disable-debug --disable-doc --disable-network \
+        --disable-x86asm --disable-ffplay --disable-everything \
+        --enable-ffmpeg --enable-ffprobe \
+        --enable-protocol=file,pipe \
+        --enable-demuxers --enable-muxers --enable-parsers --enable-bsfs \
+        --enable-decoder=aac,aac_latm,mp3,opus,vorbis,flac,ac3,eac3,h264,hevc,vp8,vp9,av1 \
+    && make -j"$(nproc)" \
+    && make install \
+    && strip /opt/ffmpeg/bin/ffmpeg /opt/ffmpeg/bin/ffprobe
+
+
+FROM python:3.12-slim-bookworm
+
+# yt-dlp writes its cache under XDG_CACHE_HOME; the app user has no home directory.
+ENV PATH="/app/.venv/bin:$PATH" \
+    XDG_CACHE_HOME=/tmp/.cache
+
+RUN groupadd --system app && useradd --system --gid app app
+
+COPY --from=ffmpeg /opt/ffmpeg/bin/ffmpeg /opt/ffmpeg/bin/ffprobe /usr/local/bin/
 
 WORKDIR /app
-COPY --from=builder --chown=app:app /app/.venv /app/.venv
+COPY --from=builder /app/.venv /app/.venv
 
 USER app
 
