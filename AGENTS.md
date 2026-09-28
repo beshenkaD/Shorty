@@ -8,8 +8,10 @@ Guide for AI assistants working on shorty
 
 ```sh
 uv sync
-uv run python main.py
+uv run shorty-bot
 ```
+
+**Docker:** `docker compose up --build` runs the bot in a container (reads the same `.env`).
 
 ## Definition of done
 

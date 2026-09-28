@@ -1,0 +1,14 @@
+.venv
+.git
+.gitignore
+.env
+.env.example
+tests
+CLAUDE.md
+AGENTS.md
+LICENCE
+**/__pycache__
+**/*.pyc
+.mypy_cache
+.ruff_cache
+.pytest_cache
